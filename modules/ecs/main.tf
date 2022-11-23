@@ -1,5 +1,5 @@
 data "template_file" "ramp-api-container-definitions" {
-  template = file("${path.module}/../task-definitions/ramp-api-container-definitions.json.tpl")
+  template = file("task-definitions/ramp-api-task-definition.json.tpl")
   vars     = {
     app-name                = "ramp-api"
     app-image               = "${var.ecr_url}/ramp-api"
@@ -7,9 +7,11 @@ data "template_file" "ramp-api-container-definitions" {
     log-group-name          = "ramp-api-log-group"
     fargate-cpu             = var.ramp-api-fargate-cpu
     fargate-memory          = var.ramp-api-fargate-memory
-    aws-region              = "eu-west-1"
-    network-mode            = var.network-mode
+    aws-region              = "us-east-1"
+    network-mode            = "awsvpc"
     ramp-api-port           = var.ramp-api-app-port
+    sender_wallet           = "0xfFc53ba77AA5FD6bA432Ae10f0b50d196fB89559"
+    sender_private_key_sec  = aws_ssm_parameter.private-key-sec.arn
   }
 }
 
@@ -17,7 +19,7 @@ resource "aws_ecs_task_definition" "ramp-api-task-definition" {
   family             = "ramp-api-ecs-task"
   execution_role_arn = aws_iam_role.ramp-api-ecs-task-execution-role.arn
   task_role_arn      = aws_iam_role.ramp-api-ecs-task-execution-role.arn
-  network_mode       = var.network-mode
+  network_mode       = "awsvpc"
   volume {
     name = "service-storage"
   }
@@ -32,7 +34,7 @@ resource "aws_ecs_task_definition" "ramp-api-task-definition" {
 resource "aws_security_group" "ramp-api-sg" {
   name        = "ramp-api-sg"
   description = "allow inbound access from everywhere only"
-  vpc_id      = data.aws_vpc.public-vpc.id
+  vpc_id      = aws_default_vpc.default_vpc.id
   ingress {
     protocol    = "tcp"
     from_port   = var.ramp-api-app-secure-port
@@ -65,21 +67,12 @@ resource "aws_ecs_service" "ramp-api-service" {
     security_groups  = [
       aws_security_group.ramp-api-sg.id
     ]
-    //subnets          = data.aws_subnet_ids.public-vpc-private-subnet-all.ids
+    subnets          = ["${aws_default_subnet.default_subnet_a.id}", "${aws_default_subnet.default_subnet_b.id}", "${aws_default_subnet.default_subnet_c.id}"]
     assign_public_ip = true
-  }
-  load_balancer {
-    target_group_arn = aws_lb_target_group.ramp-api.id
-    container_name   = "ramp-api"
-    container_port   = var.ramp-api-app-port
   }
   lifecycle {
     ignore_changes = [desired_count]
   }  
-  depends_on = [
-    aws_lb-internal-lb,
-    aws_lb_target_group.ramp-api
-  ]
 }
 
 resource "aws_iam_role" "ramp-api-ecs-task-execution-role" {
@@ -99,4 +92,111 @@ resource "aws_iam_role" "ramp-api-ecs-task-execution-role" {
   ]
 }
 EOF
+}
+
+resource "aws_iam_policy" "ramp-ssm-policy" {
+  name        = "ramp-secret-read"
+  description = "Access to secret manager HERE RC secret"
+  policy      = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:DescribeParameters",
+                "ssm:GetParameterHistory",
+                "ssm:GetParametersByPath",
+                "ssm:GetParameters",
+                "ssm:GetParameter",
+                "ssm:DeleteParameters"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+              "kms:Decrypt"
+            ],
+            "Resource": "*"
+         }
+    ]
+}
+EOF
+}
+resource "aws_iam_policy" "ramp-ecs-task-execution-policy" {
+  name   = "ramp-ecs-task-execution-policy"
+  policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "cloudwatch:GetMetricStatistics",
+                "cloudwatch:ListMetrics",
+                "cloudwatch:PutMetricData",
+                "s3:Get*",
+                "s3:List*",
+                "s3:PutObject",
+                "sqs:List*",
+                "sqs:Get*",
+                "sqs:DeleteMessage*",
+                "sqs:ReceiveMessage",
+                "sqs:SendMessage"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+EOF
+}
+
+
+resource "aws_iam_role_policy_attachment" "ramp-ecs-task-role-ssm" {
+  role       = aws_iam_role.ramp-api-ecs-task-execution-role.name
+  policy_arn = aws_iam_policy.ramp-ssm-policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "ramp-ecs-task-role-execution" {
+  role       = aws_iam_role.ramp-api-ecs-task-execution-role.name
+  policy_arn = aws_iam_policy.ramp-ecs-task-execution-policy.arn
+}
+
+###VPC AND SUBNETS
+
+resource "aws_default_vpc" "default_vpc" {
+
+}
+
+resource "aws_default_subnet" "default_subnet_a" {
+    availability_zone = "us-east-1a"
+}
+
+resource "aws_default_subnet" "default_subnet_b" {
+    availability_zone = "us-east-1a"
+}
+resource "aws_default_subnet" "default_subnet_c" {
+    availability_zone = "us-east-1a"
+}
+
+
+#SSM
+resource "aws_ssm_parameter" "private-key-sec" {
+  name        = "private-key-sec"
+  description = "Sender Wallet Private Key"
+  type        = "String"
+  value       = "UPDATE_ME_IN_PARAMETER_STORE"
+  overwrite   = true
+  lifecycle {
+    ignore_changes = [
+      value
+    ]
+  }
 }

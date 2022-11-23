@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 4.0"
+      version = "4.15.1"
     }
   }
 }
@@ -21,4 +21,6 @@ module "ecs" {
   source = "./modules/ecs"
   ramp-api-fargate-memory = 512
   ramp-api-fargate-cpu = 256
+  ecr_url = module.ecr.ecr_url
+
 }

@@ -22,3 +22,8 @@ variable "ramp-api-health-path" {
 variable "ramp-api-app-secure-port" {
   default = "3000"
 }
+
+variable "ecr_url" {
+  description = "ecrl url"
+  type = string
+}
