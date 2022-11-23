@@ -16,3 +16,9 @@ module "ecr" {
   source = "./modules/ecr"
   ecr_name = local.env["ecr_name"]
 }
+
+module "ecs" {
+  source = "./modules/ecs"
+  ramp-api-fargate-memory = 512
+  ramp-api-fargate-cpu = 256
+}
