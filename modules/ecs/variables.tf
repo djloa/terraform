@@ -27,3 +27,8 @@ variable "ecr_url" {
   description = "ecrl url"
   type = string
 }
+
+
+data "aws_availability_zones" "available_zones" {
+  state = "available"
+}
