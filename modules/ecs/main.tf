@@ -10,7 +10,7 @@ data "template_file" "ramp-api-container-definitions" {
     aws-region              = "us-east-1"
     network-mode            = "awsvpc"
     ramp-api-port           = var.ramp-api-app-port
-    sender_wallet           = "0xfFc53ba77AA5FD6bA432Ae10f0b50d196fB89559"
+    sender_wallet           = "0xF7508d044d21169927dE87aa358E79b9E17561c9"
     sender_private_key_sec  = aws_ssm_parameter.private-key-sec.arn
   }
 }
@@ -29,28 +29,6 @@ resource "aws_ecs_task_definition" "ramp-api-task-definition" {
   cpu                   = var.ramp-api-fargate-cpu
   memory                = var.ramp-api-fargate-memory
   container_definitions = data.template_file.ramp-api-container-definitions.rendered
-}
-
-resource "aws_security_group" "ramp-api-sg" {
-  name        = "ramp-api-sg"
-  description = "allow inbound access from everywhere only"
-  vpc_id      = aws_vpc.default.id
-  ingress {
-    protocol    = "tcp"
-    from_port   = var.ramp-api-app-secure-port
-    to_port     = var.ramp-api-app-secure-port
-    cidr_blocks = [
-      "0.0.0.0/0"
-    ]
-  }
-  egress {
-    protocol    = "-1"
-    from_port   = 0
-    to_port     = 0
-    cidr_blocks = [
-      "0.0.0.0/0"
-    ]
-  }
 }
 
 resource "aws_ecs_cluster" "fargate_cluster" {
@@ -259,7 +237,7 @@ resource "aws_security_group" "lb" {
 ###   SECURITY GROUP
 
 resource "aws_security_group" "ramp_api_task" {
-  name        = "ramp_api-task-security-group"
+  name        = "allows only traffic in the 3000 port"
   vpc_id      = aws_vpc.default.id
 
   ingress {
